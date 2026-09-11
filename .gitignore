@@ -1,0 +1,5 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+quest_bot.sqlite3
