@@ -78,8 +78,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.effective_message.reply_text(
-            "Привет 👀\n\nПохоже, ты нашла начало этой истории.\n"
-            "Когда захочешь продолжить — просто напиши мне сюда."
+            "Одна книга нашла тебя.\n"
+            "Когда захочешь узнать, где следующая книга, просто напиши сюда любое сообщение"
         )
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
