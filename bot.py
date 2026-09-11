@@ -114,9 +114,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.effective_message.reply_text(
-        "Привет 👀\n\n"
-        "Похоже, ты нашла начало этой истории.\n"
-        "Когда захочешь продолжить — просто напиши мне сюда."
+        "Одна книга нашла тебя 👀\n"
+        "Когда захочешь узнать, где следующая — просто напиши сюда."
     )
 
 
