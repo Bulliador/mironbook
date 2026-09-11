@@ -1,22 +1,67 @@
 import os
 import sqlite3
+import threading
+import time
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0") or 0)
 DB_PATH = os.getenv("DB_PATH", "quest_bot.sqlite3")
+PORT = int(os.getenv("PORT", "8080"))
+STARTED_AT = time.time()
+
+
+def format_uptime(seconds: float) -> str:
+    seconds = int(seconds)
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days} д")
+    if hours or days:
+        parts.append(f"{hours} ч")
+    if minutes or hours or days:
+        parts.append(f"{minutes} мин")
+    parts.append(f"{seconds} сек")
+    return " ".join(parts)
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            body = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        body = b"Book Hunt Bot is running."
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"Health server is running on port {PORT}")
+    return server
 
 
 def db_connect():
@@ -25,32 +70,27 @@ def db_connect():
 
 def init_db():
     with db_connect() as con:
-        con.execute(
-            """
+        con.execute("""
             CREATE TABLE IF NOT EXISTS message_routes (
                 admin_message_id INTEGER PRIMARY KEY,
                 user_chat_id INTEGER NOT NULL,
                 created_at TEXT NOT NULL
             )
-            """
-        )
+        """)
         con.commit()
 
 
 def save_route(admin_message_id: int, user_chat_id: int):
     with db_connect() as con:
-        con.execute(
-            """
+        con.execute("""
             INSERT OR REPLACE INTO message_routes
             (admin_message_id, user_chat_id, created_at)
             VALUES (?, ?, ?)
-            """,
-            (
-                admin_message_id,
-                user_chat_id,
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
+        """, (
+            admin_message_id,
+            user_chat_id,
+            datetime.now(timezone.utc).isoformat(),
+        ))
         con.commit()
 
 
@@ -65,13 +105,11 @@ def get_user_chat_id(admin_message_id: int):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-
     if chat_id == ADMIN_ID:
         await update.effective_message.reply_text(
             "🛠 Режим администратора.\n\n"
             "Когда кто-то напишет боту, его сообщение появится здесь.\n"
-            "Чтобы ответить от имени бота — нажми Reply на сообщение пользователя "
-            "и отправь текст, фото, стикер или другой поддерживаемый тип сообщения."
+            "Чтобы ответить от имени бота — нажми Reply на сообщение пользователя."
         )
         return
 
@@ -88,19 +126,27 @@ async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Copy a player's message to the admin and remember where replies must go."""
-    if ADMIN_ID == 0:
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uptime = format_uptime(time.time() - STARTED_AT)
+    if update.effective_user.id == ADMIN_ID:
         await update.effective_message.reply_text(
-            "Бот пока находится в режиме настройки."
+            "✅ Book Hunt работает\n"
+            f"Uptime: {uptime}\n"
+            "Health endpoint: /health"
         )
+    else:
+        await update.effective_message.reply_text("✅ Бот работает.")
+
+
+async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ADMIN_ID == 0:
+        await update.effective_message.reply_text("Бот пока находится в режиме настройки.")
         return
 
     msg = update.effective_message
     user = update.effective_user
     chat_id = update.effective_chat.id
 
-    # Small header so the admin knows who wrote.
     name = user.full_name or "Без имени"
     username = f"@{user.username}" if user.username else "без username"
 
@@ -114,7 +160,6 @@ async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     save_route(header.message_id, chat_id)
 
-    # Copy instead of forward: the recipient does not see a "forwarded from" label.
     copied = await context.bot.copy_message(
         chat_id=ADMIN_ID,
         from_chat_id=chat_id,
@@ -124,23 +169,19 @@ async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send an admin's Reply back to the original player."""
     msg = update.effective_message
 
     if not msg.reply_to_message:
         await msg.reply_text(
-            "Чтобы отправить ответ пользователю от имени бота, "
-            "нажми Reply на его сообщение."
+            "Чтобы отправить ответ пользователю от имени бота, нажми Reply на его сообщение."
         )
         return
 
-    replied_to_id = msg.reply_to_message.message_id
-    user_chat_id = get_user_chat_id(replied_to_id)
+    user_chat_id = get_user_chat_id(msg.reply_to_message.message_id)
 
     if not user_chat_id:
         await msg.reply_text(
-            "Не нашёл адресата для этого сообщения. "
-            "Ответь Reply именно на сообщение/карточку пользователя."
+            "Не нашёл адресата. Ответь Reply именно на сообщение/карточку пользователя."
         )
         return
 
@@ -169,10 +210,11 @@ async def post_init(application: Application):
 def main():
     if not BOT_TOKEN:
         raise RuntimeError(
-            "Не указан BOT_TOKEN. Создай файл .env по примеру .env.example."
+            "Не указан BOT_TOKEN. Добавь BOT_TOKEN в Railway Variables или .env."
         )
 
     init_db()
+    start_health_server()
 
     app = (
         Application.builder()
@@ -183,6 +225,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", show_id))
+    app.add_handler(CommandHandler("status", status))
 
     if ADMIN_ID:
         app.add_handler(
@@ -192,12 +235,7 @@ def main():
             )
         )
 
-    app.add_handler(
-        MessageHandler(
-            ~filters.COMMAND,
-            user_message,
-        )
-    )
+    app.add_handler(MessageHandler(~filters.COMMAND, user_message))
 
     print("Bot is running...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
