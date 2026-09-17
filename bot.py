@@ -197,13 +197,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     for delay, text in START_MESSAGES:
-    if delay > 0:
-        await asyncio.sleep(delay)
+        if delay > 0:
+            await asyncio.sleep(delay)
 
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-    )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+        )
 
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
