@@ -202,7 +202,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=chat_id,
-            text=text
+            text=text,
             parse_mode="HTML",
         )
 
