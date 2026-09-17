@@ -22,12 +22,12 @@ STARTED_AT = time.time()
 
 # ===== РЕДАКТИРУЙ ПРИВЕТСТВИЕ ЗДЕСЬ =====
 START_MESSAGES = [
-    'Первое сообщение квеста.',
-    'Второе сообщение квеста.',
-    'Третье сообщение квеста.',
+    (0, "Книга была передана еще давно, продолжения не будет."),
+    (1, "Немного странные последние действия от тебя, ну да ладно. Возможно, когда-нибудь в будущем, когда все это останется позади, мы сможем снова нормально общаться."),
+    (2, "Спасибо за все. Береги себя."),
+    (5, "Симхе привет кста"),
 ]
-START_MESSAGE_DELAY = 2.0
-QUEST_FINISHED_TEXT = 'Квест окончен'
+QUEST_FINISHED_TEXT = 'Done'
 # ==========================================
 
 
@@ -196,10 +196,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text(QUEST_FINISHED_TEXT)
         return
 
-    for index, text in enumerate(START_MESSAGES):
-        if index > 0:
-            await asyncio.sleep(START_MESSAGE_DELAY)
-        await context.bot.send_message(chat_id=chat_id, text=text)
+    for delay, text in START_MESSAGES:
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+    )
 
 
 async def show_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
