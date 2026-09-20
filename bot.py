@@ -30,7 +30,7 @@ START_MESSAGES = [
         "STATUS: CLOSED\n"
         "QUEST: FINISHED\n"
         "NEXT_CHAPTER: NONE"
-        "</blockquote>""),
+        "</blockquote>"),
 ]
 QUEST_FINISHED_TEXT = 'Done'
 # ==========================================
